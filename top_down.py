@@ -116,7 +116,7 @@ def process_one(path, head):
     fetch_bandwidth = frontend_bound.add_down("Fetch Bandwidth", frontend_bound - fetch_latency)
     branch_mispredicts = bad_speculation.add_down("Branch Mispredicts", bad_speculation)
     memory_bound = backend_bound.add_down("Memory Bound", backend_bound * float(csv_file['stall_cycle_ls_dq']) / (
-        float(csv_file['stall_cycle_rob']) + float(csv_file['stall_cycle_int_dq']) + float(csv_file['stall_cycle_fp_dq']) + float(csv_file['stall_cycle_ls_dq'])))
+        stall_cycles_core + float(csv_file['stall_cycle_ls_dq'])))
     core_bound = backend_bound.add_down("Core Bound", backend_bound - memory_bound)
 
     itlb_miss = fetch_latency.add_down("iTLB Miss", float(csv_file['itlb_miss_cycles']) / float(csv_file['total_cycles']))
@@ -130,6 +130,12 @@ def process_one(path, head):
     integer_prf = core_bound.add_down("Integer PRF", core_bound * float(csv_file['stall_cycle_int']) / stall_cycles_core)
     floatpoint_prf = core_bound.add_down("Floatpoint PRF", core_bound * float(csv_file['stall_cycle_fp']) / stall_cycles_core)
 
+    if 'l1d_loads_bound_cycles' in csv_file:
+        l1d_loads_bound = loads_bound.add_down("L1D Loads Bound", float(csv_file['l1d_loads_bound_cycles']) / float(csv_file['total_cycles']))
+        l2_loads_bound = loads_bound.add_down("L2 Loads Bound", float(csv_file['l2_loads_bound_cycles']) / float(csv_file['total_cycles']))
+        l3_loads_bound = loads_bound.add_down("L3 Loads Bound", float(csv_file['l3_loads_bound_cycles']) / float(csv_file['total_cycles']))
+        ddr_loads_bound = loads_bound.add_down("DDR Loads Bound", float(csv_file['ddr_loads_bound_cycles']) / float(csv_file['total_cycles']))
+
     return (
         Sunburst(init_opts=opts.InitOpts(width="1000px", height="1200px"))
         .add(series_name="", data_pair=top.draw(), radius=[0, "90%"])
@@ -137,11 +143,14 @@ def process_one(path, head):
         .set_series_opts(label_opts=opts.LabelOpts(formatter="{b}")))
 
 
-title = sys.argv[1].replace('.log.csv', '')
+title = sys.argv[1]
+directory = sys.argv[2]
+suffix = sys.argv[3]
 print(title)
 (
     Page(page_title=title, layout=Page.SimplePageLayout)
-    .add(process_one("spec06_rv64gcb_o2_20m/256/" + sys.argv[1], title + "_256"))
-    .add(process_one("spec06_rv64gcb_o2_20m/600/" + sys.argv[1], title + "_600"))
-    .add(process_one("spec06_rv64gcb_o2_20m/600_scaled/" + sys.argv[1], title + "_600_scaled"))
-    .render("out/" + title + ".html"))
+    # .add(process_one("spec06_rv64gcb_o2_20m/256/" + sys.argv[1], title + "_256"))
+    # .add(process_one("spec06_rv64gcb_o2_20m/600/" + sys.argv[1], title + "_600"))
+    # .add(process_one("spec06_rv64gcb_o2_20m/600_scaled/" + sys.argv[1], title + "_600_scaled"))
+    .add(process_one(directory + "/csv/" + title + ".log.csv", title + "_" + suffix))
+    .render(directory + "/html/" + title + ".html"))
