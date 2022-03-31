@@ -131,10 +131,17 @@ def process_one(path, head):
     floatpoint_prf = core_bound.add_down("Floatpoint PRF", core_bound * float(csv_file['stall_cycle_fp']) / stall_cycles_core)
 
     if 'l1d_loads_bound_cycles' in csv_file:
-        l1d_loads_bound = loads_bound.add_down("L1D Loads Bound", float(csv_file['l1d_loads_bound_cycles']) / float(csv_file['total_cycles']))
-        l2_loads_bound = loads_bound.add_down("L2 Loads Bound", float(csv_file['l2_loads_bound_cycles']) / float(csv_file['total_cycles']))
-        l3_loads_bound = loads_bound.add_down("L3 Loads Bound", float(csv_file['l3_loads_bound_cycles']) / float(csv_file['total_cycles']))
-        ddr_loads_bound = loads_bound.add_down("DDR Loads Bound", float(csv_file['ddr_loads_bound_cycles']) / float(csv_file['total_cycles']))
+        l1d_loads_bound = loads_bound.add_down("L1D Loads", float(csv_file['l1d_loads_bound_cycles']) / float(csv_file['total_cycles']))
+        l2_loads_bound = loads_bound.add_down("L2 Loads", float(csv_file['l2_loads_bound_cycles']) / float(csv_file['total_cycles']))
+        l3_loads_bound = loads_bound.add_down("L3 Loads", float(csv_file['l3_loads_bound_cycles']) / float(csv_file['total_cycles']))
+        ddr_loads_bound = loads_bound.add_down("DDR Loads", float(csv_file['ddr_loads_bound_cycles']) / float(csv_file['total_cycles']))
+        if 'l1d_loads_mshr_bound' in csv_file:
+            l1d_loads_mshr_bound = l1d_loads_bound.add_down("L1D Loads MSHR", float(csv_file['l1d_loads_mshr_bound']) / float(csv_file['total_cycles']))
+            l1d_loads_tlb_bound = l1d_loads_bound.add_down("L1D Loads TLB", float(csv_file['l1d_loads_tlb_bound']) / float(csv_file['total_cycles']))
+            l1d_loads_store_data_bound = l1d_loads_bound.add_down("L1D Loads sdata", float(csv_file['l1d_loads_store_data_bound']) / float(csv_file['total_cycles']))
+            l1d_loads_bank_conflict_bound = l1d_loads_bound.add_down("L1D Loads\nBank Conflict", float(csv_file['l1d_loads_bank_conflict_bound']) / float(csv_file['total_cycles']))
+            l1d_loads_vio_check_redo_bound = l1d_loads_bound.add_down("L1D Loads VioRedo", float(csv_file['l1d_loads_vio_check_redo_bound']) / float(csv_file['total_cycles']))
+
 
     return (
         Sunburst(init_opts=opts.InitOpts(width="1000px", height="1200px"))
