@@ -1,2 +1,8 @@
-/emus/
-/spec06_rv64gcb_o2_20m/
+*
+!.gitignore
+!json2f.py
+!README.md
+!run_emu.sh
+!top_down.py
+!top_down.sh
+!file.f

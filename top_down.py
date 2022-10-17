@@ -87,7 +87,6 @@ class TopDown:
         return items
 
 
-
 def process_one(path, head):
     """Process one chart
 
@@ -101,46 +100,71 @@ def process_one(path, head):
     with open(path, encoding='UTF-8') as file:
         csv_file = dict(csv.reader(file))
 
-    csv_file['total_slots'] = int(csv_file['total_cycles']) * 6
+    def use(name):
+        return float(csv_file[name])
 
-    stall_cycles_core = float(csv_file['stall_cycle_fp']) + float(csv_file['stall_cycle_int']) + float(csv_file['stall_cycle_rob']) + float(csv_file['stall_cycle_int_dq']) + float(csv_file['stall_cycle_fp_dq'])
+    csv_file['total_slots'] = use('total_cycles') * 6
+    csv_file['ifu2id_allNO_slots'] = use('ifu2id_allNO_cycle') * 6
+    csv_file['ifu2id_hvButNotFull_slots'] = use('fetch_bubbles') - use('ifu2id_allNO_slots')
+
+    stall_cycles_core = use('stall_cycle_fp') + use('stall_cycle_int') + use('stall_cycle_rob') + use('stall_cycle_int_dq') + use('stall_cycle_fp_dq') + use('ls_dq_bound_cycles')
 
     top = TopDown("Top", 1.0)
 
-    frontend_bound = top.add_down("Frontend Bound", float(csv_file['decode_bubbles']) / float(csv_file['total_slots']))
-    bad_speculation = top.add_down("Bad Speculation", (float(csv_file['slots_issued']) - float(csv_file['slots_retired']) + float(csv_file['recovery_bubbles'])) / float(csv_file['total_slots']))
-    retiring = top.add_down("Retiring", float(csv_file['slots_retired']) / float(csv_file['total_slots']))
+# top
+    frontend_bound = top.add_down("Frontend Bound", use('decode_bubbles') / use('total_slots'))
+    bad_speculation = top.add_down("Bad Speculation", (use('slots_issued') - use('slots_retired') + use('recovery_bubbles')) / use('total_slots'))
+    retiring = top.add_down("Retiring", use('slots_retired') / use('total_slots'))
     backend_bound = top.add_down("Backend Bound", top - frontend_bound - bad_speculation - retiring)
 
-    fetch_latency = frontend_bound.add_down("Fetch Latency", float(csv_file['fetch_bubbles']) / float(csv_file['total_slots']))
+#top->frontend_bound
+    fetch_latency = frontend_bound.add_down("Fetch Latency", use('fetch_bubbles') / use('total_slots'))
     fetch_bandwidth = frontend_bound.add_down("Fetch Bandwidth", frontend_bound - fetch_latency)
+
+# top->frontend_bound->fetch_latency
+    itlb_miss = fetch_latency.add_down("iTLB Miss", use('itlb_miss_cycles') / use('total_cycles'))
+    icache_miss = fetch_latency.add_down("iCache Miss", use('icache_miss_cycles') / use('total_cycles'))
+    stage2_redirect_cycles = fetch_latency.add_down("Stage2 Redirect", use('stage2_redirect_cycles') / use('total_cycles'))
+    if2id_bandwidth = fetch_latency.add_down("IF2ID Bandwidth", use('ifu2id_hvButNotFull_slots') / use('total_slots'))
+    fetch_latency_others = fetch_latency.add_down("Fetch Latency Others", fetch_latency - itlb_miss - icache_miss - stage2_redirect_cycles - if2id_bandwidth)
+
+# top->frontend_bound->fetch_latency->stage2_redirect_cycles
+    branch_resteers = stage2_redirect_cycles.add_down("Branch Resteers", use('branch_resteers_cycles') / use('total_cycles'))
+    robFlush_bubble = stage2_redirect_cycles.add_down("RobFlush Bubble", use('robFlush_bubble_cycles') / use('total_cycles'))
+    ldReplay_bubble = stage2_redirect_cycles.add_down("LdReplay Bubble", use('ldReplay_bubble_cycles') / use('total_cycles'))
+
+# top->bad_speculation
     branch_mispredicts = bad_speculation.add_down("Branch Mispredicts", bad_speculation)
-    memory_bound = backend_bound.add_down("Memory Bound", backend_bound * float(csv_file['stall_cycle_ls_dq']) / (
-        stall_cycles_core + float(csv_file['stall_cycle_ls_dq'])))
+
+# top->backend_bound
+    memory_bound = backend_bound.add_down("Memory Bound", backend_bound * (use('store_bound_cycles') + use('load_bound_cycles')) / (
+        stall_cycles_core + use('store_bound_cycles') + use('load_bound_cycles')))
     core_bound = backend_bound.add_down("Core Bound", backend_bound - memory_bound)
 
-    itlb_miss = fetch_latency.add_down("iTLB Miss", float(csv_file['itlb_miss_cycles']) / float(csv_file['total_cycles']))
-    icache_miss = fetch_latency.add_down("iCache Miss", float(csv_file['icache_miss_cycles']) / float(csv_file['total_cycles']))
-    fetch_latency_others = fetch_latency.add_down("Others", fetch_latency - itlb_miss - icache_miss)
-    stores_bound = memory_bound.add_down("Stores Bound", float(csv_file['store_bound_cycles']) / float(csv_file['total_cycles']))
-    loads_bound = memory_bound.add_down("Loads Bound", memory_bound - stores_bound)
-    integer_dq = core_bound.add_down("Integer DQ", core_bound * float(csv_file['stall_cycle_int_dq']) / stall_cycles_core)
-    floatpoint_dq = core_bound.add_down("Floatpoint DQ", core_bound * float(csv_file['stall_cycle_fp_dq']) / stall_cycles_core)
-    rob = core_bound.add_down("ROB", core_bound * float(csv_file['stall_cycle_rob']) / stall_cycles_core)
-    integer_prf = core_bound.add_down("Integer PRF", core_bound * float(csv_file['stall_cycle_int']) / stall_cycles_core)
-    floatpoint_prf = core_bound.add_down("Floatpoint PRF", core_bound * float(csv_file['stall_cycle_fp']) / stall_cycles_core)
+# top->backend_bound->memory_bound
+    stores_bound = memory_bound.add_down("Stores Bound", use('store_bound_cycles') / use('total_cycles'))
+    loads_bound = memory_bound.add_down("Loads Bound", use('load_bound_cycles') / use('total_cycles'))
 
-    if 'l1d_loads_bound_cycles' in csv_file:
-        l1d_loads_bound = loads_bound.add_down("L1D Loads", float(csv_file['l1d_loads_bound_cycles']) / float(csv_file['total_cycles']))
-        l2_loads_bound = loads_bound.add_down("L2 Loads", float(csv_file['l2_loads_bound_cycles']) / float(csv_file['total_cycles']))
-        l3_loads_bound = loads_bound.add_down("L3 Loads", float(csv_file['l3_loads_bound_cycles']) / float(csv_file['total_cycles']))
-        ddr_loads_bound = loads_bound.add_down("DDR Loads", float(csv_file['ddr_loads_bound_cycles']) / float(csv_file['total_cycles']))
-        if 'l1d_loads_mshr_bound' in csv_file:
-            l1d_loads_mshr_bound = l1d_loads_bound.add_down("L1D Loads MSHR", float(csv_file['l1d_loads_mshr_bound']) / float(csv_file['total_cycles']))
-            l1d_loads_tlb_bound = l1d_loads_bound.add_down("L1D Loads TLB", float(csv_file['l1d_loads_tlb_bound']) / float(csv_file['total_cycles']))
-            l1d_loads_store_data_bound = l1d_loads_bound.add_down("L1D Loads sdata", float(csv_file['l1d_loads_store_data_bound']) / float(csv_file['total_cycles']))
-            l1d_loads_bank_conflict_bound = l1d_loads_bound.add_down("L1D Loads\nBank Conflict", float(csv_file['l1d_loads_bank_conflict_bound']) / float(csv_file['total_cycles']))
-            l1d_loads_vio_check_redo_bound = l1d_loads_bound.add_down("L1D Loads VioRedo", float(csv_file['l1d_loads_vio_check_redo_bound']) / float(csv_file['total_cycles']))
+# top->backend_bound->core_bound
+    integer_dq = core_bound.add_down("Integer DQ", core_bound * use('stall_cycle_int_dq') / stall_cycles_core)
+    floatpoint_dq = core_bound.add_down("Floatpoint DQ", core_bound * use('stall_cycle_fp_dq') / stall_cycles_core)
+    rob = core_bound.add_down("ROB", core_bound * use('stall_cycle_rob') / stall_cycles_core)
+    integer_prf = core_bound.add_down("Integer PRF", core_bound * use('stall_cycle_int') / stall_cycles_core)
+    floatpoint_prf = core_bound.add_down("Floatpoint PRF", core_bound * use('stall_cycle_fp') / stall_cycles_core)
+    lsu_ports = core_bound.add_down("LSU Ports", core_bound * use('ls_dq_bound_cycles') / stall_cycles_core)
+
+# top->backend_bound->memory_bound->loads_bound
+    l1d_loads_bound = loads_bound.add_down("L1D Loads", use('l1d_loads_bound_cycles') / use('total_cycles'))
+    l2_loads_bound = loads_bound.add_down("L2 Loads", use('l2_loads_bound_cycles') / use('total_cycles'))
+    l3_loads_bound = loads_bound.add_down("L3 Loads", use('l3_loads_bound_cycles') / use('total_cycles'))
+    ddr_loads_bound = loads_bound.add_down("DDR Loads", use('ddr_loads_bound_cycles') / use('total_cycles'))
+
+# top->backend_bound->memory_bound->loads_bound->l1d_loads_bound
+    l1d_loads_mshr_bound = l1d_loads_bound.add_down("L1D Loads MSHR", use('l1d_loads_mshr_bound') / use('total_cycles'))
+    l1d_loads_tlb_bound = l1d_loads_bound.add_down("L1D Loads TLB", use('l1d_loads_tlb_bound') / use('total_cycles'))
+    l1d_loads_store_data_bound = l1d_loads_bound.add_down("L1D Loads sdata", use('l1d_loads_store_data_bound') / use('total_cycles'))
+    l1d_loads_bank_conflict_bound = l1d_loads_bound.add_down("L1D Loads\nBank Conflict", use('l1d_loads_bank_conflict_bound') / use('total_cycles'))
+    l1d_loads_vio_check_redo_bound = l1d_loads_bound.add_down("L1D Loads VioRedo", use('l1d_loads_vio_check_redo_bound') / use('total_cycles'))
 
 
     return (
@@ -156,8 +180,5 @@ suffix = sys.argv[3]
 print(title)
 (
     Page(page_title=title, layout=Page.SimplePageLayout)
-    # .add(process_one("spec06_rv64gcb_o2_20m/256/" + sys.argv[1], title + "_256"))
-    # .add(process_one("spec06_rv64gcb_o2_20m/600/" + sys.argv[1], title + "_600"))
-    # .add(process_one("spec06_rv64gcb_o2_20m/600_scaled/" + sys.argv[1], title + "_600_scaled"))
     .add(process_one(directory + "/csv/" + title + ".log.csv", title + "_" + suffix))
     .render(directory + "/html/" + title + ".html"))
